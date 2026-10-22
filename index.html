@@ -1,14 +1,12 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DNI Scanner</title>
 
-  <!-- ZXing Multi-Format Engine -->
-  <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
-  
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
+
   <style>
     html, body {
       margin: 0;
@@ -22,14 +20,12 @@
 
     #video {
       position: fixed;
-      top: 0;
-      left: 0;
+      inset: 0;
       width: 100vw;
       height: 100vh;
       object-fit: cover;
     }
 
-    /* Green target guide overlay */
     #roi {
       position: fixed;
       left: 50%;
@@ -48,7 +44,6 @@
 
     #canvas { display: none; }
 
-    /* Minimal Scanner Status Pill */
     #statusPill {
       position: fixed;
       top: 16px;
@@ -63,7 +58,6 @@
       border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
-    /* Decoded result display banner */
     #resultBanner {
       position: fixed;
       bottom: 30px;
@@ -92,12 +86,21 @@
       font-weight: bold;
     }
 
-    /* Banner State Colors */
-    .banner-ok { border: 2px solid #00ff00; color: #00ff00; }
-    .banner-warn { border: 2px solid #ffcc00; color: #ffcc00; }
-    .banner-bad { border: 2px solid #ff3333; color: #ff3333; }
+    .banner-ok {
+      border: 2px solid #00ff00;
+      color: #00ff00;
+    }
 
-    /* Manual Entry Button */
+    .banner-warn {
+      border: 2px solid #ffcc00;
+      color: #ffcc00;
+    }
+
+    .banner-bad {
+      border: 2px solid #ff3333;
+      color: #ff3333;
+    }
+
     #manualToggle {
       position: fixed;
       top: 16px;
@@ -113,11 +116,32 @@
       backdrop-filter: blur(4px);
     }
 
-    /* Manual Input Modal */
-    #manualModal {
+    /* Botón circular de configuración */
+    #settingsToggle {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      border-radius: 50%;
+      font-size: 21px;
+      cursor: pointer;
+      z-index: 40;
+      backdrop-filter: blur(4px);
+    }
+
+    #manualModal,
+    #settingsModal {
       display: none;
       position: fixed;
-      top: 0; left: 0; width: 100vw; height: 100vh;
+      inset: 0;
       background: rgba(0, 0, 0, 0.9);
       z-index: 50;
       flex-direction: column;
@@ -125,17 +149,20 @@
       align-items: center;
     }
 
-    #manualModal input {
+    #manualModal input,
+    #settingsModal input {
       padding: 12px;
       font-size: 18px;
       margin: 8px 0;
       width: 80%;
       max-width: 300px;
+      box-sizing: border-box;
       border-radius: 6px;
       border: 1px solid #ccc;
     }
 
-    #manualModal button {
+    #manualModal button,
+    #settingsModal button {
       padding: 12px 24px;
       margin-top: 10px;
       font-size: 16px;
@@ -146,70 +173,247 @@
       font-weight: bold;
       cursor: pointer;
     }
+
+    #manualModal .cancelButton,
+    #settingsModal .cancelButton {
+      background: #dc3545;
+      margin-top: 8px;
+    }
+
+    #settingsMessage {
+      color: #ccc;
+      font-size: 13px;
+      max-width: 300px;
+      width: 80%;
+      text-align: center;
+      margin-top: 10px;
+      line-height: 1.4;
+    }
   </style>
 </head>
 
 <body>
-
   <video id="video" autoplay playsinline muted></video>
-
   <div id="roi"></div>
-
   <canvas id="canvas"></canvas>
+  <div id="statusPill">Iniciando cámara...</div>
 
-  <div id="statusPill">Escaneando...</div>
-
-  <!-- Scan Result Banner -->
   <div id="resultBanner">
     <div id="name"></div>
     <div id="badge"></div>
   </div>
 
-  <button id="manualToggle" onclick="toggleManualModal(true)">⌨ Manual</button>
+  <button id="settingsToggle"
+          onclick="toggleSettingsModal(true)"
+          aria-label="Configuración"
+          title="Configuración">
+    ⚙
+  </button>
 
-  <!-- Manual Entry Modal -->
+  <button id="manualToggle" onclick="toggleManualModal(true)">
+    ⌨ Manual
+  </button>
+
+  <!-- Ingreso manual -->
   <div id="manualModal">
-    <h3 style="color: white; margin-bottom: 12px;">Ingreso Manual</h3>
-    <input type="text" id="manualDni" placeholder="DNI Number" />
+    <h3 style="color:white; margin-bottom:12px;">
+      Ingreso Manual
+    </h3>
+
+    <input type="text" id="manualDni" placeholder="DNI" />
     <input type="text" id="manualNombre" placeholder="Nombre (Opcional)" />
     <input type="text" id="manualApellido" placeholder="Apellido (Opcional)" />
-    <button onclick="submitManual()">Registrar Asistencia</button>
-    <button onclick="toggleManualModal(false)" style="background: #dc3545; margin-top: 8px;">Cancelar</button>
+
+    <button onclick="submitManual()">Consultar DNI</button>
+    <button class="cancelButton" onclick="toggleManualModal(false)">
+      Cancelar
+    </button>
+  </div>
+
+  <!-- Configuración del servidor -->
+  <div id="settingsModal">
+    <h3 style="color:white; margin-bottom:12px;">
+      Configuración del servidor
+    </h3>
+
+    <input
+      type="url"
+      id="serverUrlInput"
+      placeholder="http://192.168.1.50:3000"
+      autocomplete="url"
+      spellcheck="false"
+    />
+
+    <button onclick="saveServerUrl()">Guardar</button>
+    <button onclick="testServerConnection()">Probar conexión</button>
+    <button class="cancelButton" onclick="toggleSettingsModal(false)">
+      Cancelar
+    </button>
+
+    <div id="settingsMessage">
+      Ingresá la dirección del equipo donde funciona el servidor.
+    </div>
   </div>
 
   <script>
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxHTl3cwNf4ueKR9z63kgLjNcmFrIvp0Ao_J-E3-ODoIn8CVm00WDnLxPsUZr9rQbn/exec";
+    // =============================================
+    // CONFIGURACIÓN
+    // La URL se guarda en el navegador de este dispositivo.
+    // =============================================
+
+    const DEFAULT_SERVER_URL = window.location.origin;
+    const STORAGE_KEY = "asistenciaServerUrl";
+
+    let SERVER_URL = loadServerUrl();
+
+    function loadServerUrl() {
+      try {
+        return (
+          localStorage.getItem(STORAGE_KEY) || DEFAULT_SERVER_URL
+        ).replace(/\/+$/, "");
+      } catch (err) {
+        return DEFAULT_SERVER_URL;
+      }
+    }
+
+    function normalizeServerUrl(value) {
+      const url = new URL(value.trim());
+
+      if (!["http:", "https:"].includes(url.protocol)) {
+        throw new Error("Usá una dirección que empiece con http:// o https://");
+      }
+
+      if (url.username || url.password) {
+        throw new Error("La URL no debe contener usuario ni contraseña.");
+      }
+
+      return url.origin + url.pathname.replace(/\/+$/, "");
+    }
+
+    function toggleSettingsModal(show) {
+      const modal = document.getElementById("settingsModal");
+      const input = document.getElementById("serverUrlInput");
+
+      modal.style.display = show ? "flex" : "none";
+
+      if (show) {
+        input.value = SERVER_URL;
+        document.getElementById("settingsMessage").textContent =
+          "Ingresá la dirección del equipo donde funciona el servidor.";
+        scanning = false;
+        input.focus();
+      } else if (!requestInProgress &&
+                 document.getElementById("manualModal").style.display !== "flex") {
+        scanning = true;
+        loop();
+      }
+    }
+
+    function saveServerUrl() {
+      const input = document.getElementById("serverUrlInput");
+      const message = document.getElementById("settingsMessage");
+
+      try {
+        const newUrl = normalizeServerUrl(input.value);
+
+        SERVER_URL = newUrl;
+
+        try {
+          localStorage.setItem(STORAGE_KEY, SERVER_URL);
+        } catch (err) {
+          message.textContent =
+            "URL actualizada, pero el navegador no permitió guardarla permanentemente.";
+          return;
+        }
+
+        message.textContent = "URL guardada: " + SERVER_URL;
+      } catch (err) {
+        message.textContent =
+          err instanceof TypeError
+            ? "Ingresá una URL válida, por ejemplo http://192.168.1.50:3000"
+            : err.message;
+      }
+    }
+
+    async function testServerConnection() {
+      const message = document.getElementById("settingsMessage");
+
+      // Guardar primero la URL ingresada.
+      saveServerUrl();
+
+      if (message.textContent.startsWith("Ingresá") ||
+          message.textContent.startsWith("Usá") ||
+          message.textContent.startsWith("La URL")) {
+        return;
+      }
+
+      message.textContent = "Probando conexión...";
+
+      try {
+        const response = await fetch(`${SERVER_URL}/`, {
+          method: "GET",
+          headers: { "Accept": "application/json" }
+        });
+
+        if (!response.ok) {
+          throw new Error("El servidor respondió HTTP " + response.status);
+        }
+
+        const result = await response.json();
+
+        message.textContent =
+          "Conexión correcta: " +
+          (result.message || result.status || "servidor disponible");
+      } catch (err) {
+        message.textContent =
+          "No se pudo conectar. Revisá la URL, el servidor y la configuración CORS.";
+      }
+    }
 
     let pdfReader;
-    let scanning = true;
+    let scanning = false;
+    let requestInProgress = false;
+    let nextScanTimer = null;
 
     const video = document.getElementById("video");
     const roi = document.getElementById("roi");
     const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const ctx = canvas.getContext("2d", {
+      willReadFrequently: true
+    });
 
     const statusPill = document.getElementById("statusPill");
     const bannerEl = document.getElementById("resultBanner");
     const nameEl = document.getElementById("name");
     const badgeEl = document.getElementById("badge");
 
-    function playBeep(freq = 880, type = 'sine') {
+    function playBeep(freq = 880, type = "sine") {
       try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const audioCtx = new (
+          window.AudioContext || window.webkitAudioContext
+        )();
+
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
+
         osc.type = type;
         osc.frequency.value = freq;
         osc.connect(gain);
         gain.connect(audioCtx.destination);
+
         osc.start();
-        gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.15);
+        gain.gain.exponentialRampToValueAtTime(
+          0.00001,
+          audioCtx.currentTime + 0.15
+        );
+
         setTimeout(() => audioCtx.close(), 200);
-      } catch (e) { }
+      } catch (e) {}
     }
 
     function parseDNI(raw) {
       const p = raw.split("@");
+
       return {
         dni: p[4]?.trim() || p[1]?.trim() || "",
         apellido: p[1]?.trim() || "",
@@ -220,20 +424,31 @@
     function getCropGuide() {
       const vWidth = video.videoWidth;
       const vHeight = video.videoHeight;
+
       if (!vWidth || !vHeight) return null;
 
       const roiRect = roi.getBoundingClientRect();
       const videoRect = video.getBoundingClientRect();
 
-      const scale = Math.max(videoRect.width / vWidth, videoRect.height / vHeight);
+      const scale = Math.max(
+        videoRect.width / vWidth,
+        videoRect.height / vHeight
+      );
+
       const visibleWidth = videoRect.width / scale;
       const visibleHeight = videoRect.height / scale;
 
       const offsetX = (vWidth - visibleWidth) / 2;
       const offsetY = (vHeight - visibleHeight) / 2;
 
-      const cropX = Math.round(offsetX + ((roiRect.left - videoRect.left) / scale));
-      const cropY = Math.round(offsetY + ((roiRect.top - videoRect.top) / scale));
+      const cropX = Math.round(
+        offsetX + (roiRect.left - videoRect.left) / scale
+      );
+
+      const cropY = Math.round(
+        offsetY + (roiRect.top - videoRect.top) / scale
+      );
+
       const cropW = Math.round(roiRect.width / scale);
       const cropH = Math.round(roiRect.height / scale);
 
@@ -246,7 +461,7 @@
     }
 
     async function loop() {
-      if (!scanning) return;
+      if (!scanning || requestInProgress) return;
 
       try {
         if (!video.videoWidth || !video.videoHeight) {
@@ -255,6 +470,7 @@
         }
 
         const crop = getCropGuide();
+
         if (!crop || crop.w <= 0 || crop.h <= 0) {
           setTimeout(loop, 100);
           return;
@@ -265,36 +481,52 @@
           canvas.height = crop.h;
         }
 
-        ctx.drawImage(video, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
+        ctx.drawImage(
+          video,
+          crop.x, crop.y, crop.w, crop.h,
+          0, 0, crop.w, crop.h
+        );
 
-        const luminanceSource = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-        const binarizer = new ZXing.HybridBinarizer(luminanceSource);
+        const source =
+          new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+
+        const binarizer = new ZXing.HybridBinarizer(source);
         const bitmap = new ZXing.BinaryBitmap(binarizer);
-
         const result = pdfReader.decode(bitmap);
+
+        const data = parseDNI(result.getText());
+
+        if (!data.dni) {
+          setTimeout(loop, 80);
+          return;
+        }
 
         scanning = false;
         playBeep(880);
-        const raw = result.getText();
-        const data = parseDNI(raw);
-        
-        send(data);
+        await send(data);
         return;
 
       } catch (err) {
-        // Scanning loops continuously until code is found
+        // No se encontró un código en este fotograma.
       }
 
-      setTimeout(loop, 80);
+      if (scanning) setTimeout(loop, 80);
     }
 
     async function send(data) {
-      statusPill.textContent = "Enviando...";
+      if (requestInProgress) return;
+
+      requestInProgress = true;
+      scanning = false;
+      statusPill.textContent = "Consultando servidor...";
 
       try {
-        const response = await fetch(SCRIPT_URL, {
+        const response = await fetch(`${SERVER_URL}/`, {
           method: "POST",
-          headers: { "Content-Type": "text/plain" },
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
           body: JSON.stringify(data)
         });
 
@@ -304,56 +536,92 @@
 
         if (result.status === "OK") {
           bannerEl.className = "banner-ok";
-          nameEl.textContent = `${result.nombre} ${result.apellido}`;
-          badgeEl.textContent = `REGISTRADO (${result.table})`;
+          nameEl.textContent =
+            `${result.nombre} ${result.apellido}`.trim();
+
+          badgeEl.textContent =
+            `ANOTADO · GRUPO ${result.grupo}`;
+
         } else if (result.status === "NO_ANOTADO") {
           bannerEl.className = "banner-warn";
-          nameEl.textContent = `${data.nombre || 'DNI:'} ${data.apellido || data.dni}`;
-          badgeEl.textContent = `NO ANOTADO`;
+          nameEl.textContent =
+            `${data.nombre || ""} ${data.apellido || ""}`.trim()
+            || `DNI: ${result.dni}`;
+
+          badgeEl.textContent = "NO ANOTADO";
+
         } else {
           bannerEl.className = "banner-bad";
           nameEl.textContent = "ERROR";
-          badgeEl.textContent = result.message || "Error al procesar";
+          badgeEl.textContent =
+            result.message || "Error al procesar la consulta";
         }
+
       } catch (err) {
         bannerEl.style.display = "block";
         bannerEl.className = "banner-bad";
-        nameEl.textContent = "ERROR DE RED";
-        badgeEl.textContent = "No se pudo conectar con el servidor";
+        nameEl.textContent = "ERROR DE CONEXIÓN";
+        badgeEl.textContent =
+          "No se pudo conectar con el servidor";
+      } finally {
+        requestInProgress = false;
+        statusPill.textContent = "Escaneando...";
+
+        clearTimeout(nextScanTimer);
+
+        nextScanTimer = setTimeout(() => {
+          bannerEl.style.display = "none";
+
+          if (
+            document.getElementById("manualModal").style.display !== "flex" &&
+            document.getElementById("settingsModal").style.display !== "flex"
+          ) {
+            scanning = true;
+            loop();
+          }
+        }, 2000);
       }
-
-      statusPill.textContent = "Escaneando...";
-
-      setTimeout(() => {
-        bannerEl.style.display = "none";
-        scanning = true;
-        loop();
-      }, 2000);
     }
 
     function toggleManualModal(show) {
-      document.getElementById("manualModal").style.display = show ? "flex" : "none";
-      scanning = !show;
-      if (!show) loop();
+      const modal = document.getElementById("manualModal");
+      modal.style.display = show ? "flex" : "none";
+
+      if (show) {
+        scanning = false;
+        document.getElementById("manualDni").focus();
+      } else if (!requestInProgress &&
+                 document.getElementById("settingsModal").style.display !== "flex") {
+        scanning = true;
+        loop();
+      }
     }
 
-    function submitManual() {
+    async function submitManual() {
       const dni = document.getElementById("manualDni").value.trim();
       const nombre = document.getElementById("manualNombre").value.trim();
       const apellido = document.getElementById("manualApellido").value.trim();
 
-      if (!dni) return alert("Ingrese un DNI");
+      if (!dni) {
+        alert("Ingrese un DNI");
+        return;
+      }
 
-      toggleManualModal(false);
-      send({ dni, nombre, apellido });
-      
+      document.getElementById("manualModal").style.display = "none";
+
       document.getElementById("manualDni").value = "";
       document.getElementById("manualNombre").value = "";
       document.getElementById("manualApellido").value = "";
+
+      await send({ dni, nombre, apellido });
     }
 
     async function start() {
       try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error("La cámara requiere una conexión segura.");
+        }
+
         pdfReader = new ZXing.PDF417Reader();
 
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -369,17 +637,21 @@
         await video.play();
 
         const track = stream.getVideoTracks()[0];
-        if (track && 'applyConstraints' in track) {
+
+        if (track && "applyConstraints" in track) {
           try {
             await track.applyConstraints({
               advanced: [{ focusMode: "continuous" }]
             });
-          } catch (e) { }
+          } catch (e) {}
         }
 
+        statusPill.textContent = "Escaneando...";
+        scanning = true;
         loop();
 
       } catch (err) {
+        console.error("Error al iniciar la cámara:", err);
         statusPill.textContent = "Error al iniciar cámara";
       }
     }
@@ -387,5 +659,4 @@
     start();
   </script>
 </body>
-
 </html>
