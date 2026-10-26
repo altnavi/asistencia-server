@@ -1,0 +1,9 @@
+node_modules/
+certs/
+logs/
+.env
+gente.csv
+credentials.json
+asistencia.db
+asistencia.db-shm
+asistencia.db-wal

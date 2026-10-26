@@ -1,0 +1,22 @@
+{
+  "name": "asistencia-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "import": "node import.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "csv-parse": "^7.0.3",
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0",
+    "googleapis": "^187.0.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DNI Scanner</title>
+
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: sans-serif;
+    }
+
+    #video {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+    }
+
+    #roi {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 480px;
+      max-width: 85vw;
+      height: 160px;
+      max-height: 30vh;
+      transform: translate(-50%, -50%);
+      border: 3px solid #00ff00;
+      border-radius: 8px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.65);
+      pointer-events: none;
+      z-index: 10;
+
+      opacity: 1;
+      transition: opacity 300ms ease-in-out;
+    }
+
+    #roi.fade-out {
+      opacity: 0;
+    }
+
+    #canvas {
+      display: none;
+    }
+
+    #statusPill {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.75);
+      color: white;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      z-index: 20;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    #resultBanner {
+      position: fixed;
+      bottom: 30px;
+      left: 5%;
+      width: 90%;
+      padding: 12px;
+      box-sizing: border-box;
+      text-align: left;
+      color: white;
+      border-radius: 10px;
+      background: red;
+      z-index: 30;
+      display: none;
+    }
+
+    #resultBanner.banner-ok {
+      background: green;
+      color: white;
+      border: none;
+    }
+
+    #resultBanner.banner-bad {
+      background: red;
+      color: white;
+      border: none;
+    }
+
+    #resultTable {
+      margin: 0;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: clamp(10px, 3.2vw, 14px);
+      line-height: 1.55;
+      white-space: pre;
+      overflow-x: auto;
+      color: inherit;
+      font-weight: normal;
+      font-variant-ligatures: none;
+      text-shadow: 1px 1px 3px black;
+    }
+
+    #groupLabel {
+      margin-top: 8px;
+      font-family: sans-serif;
+      font-size: 16px;
+      font-weight: normal;
+      text-shadow: 1px 1px 3px black;
+    }
+
+    #badge {
+      margin-top: 6px;
+      font-family: sans-serif;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      text-shadow: 1px 1px 3px black;
+    }
+
+    #manualToggle {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      z-index: 40;
+      backdrop-filter: blur(4px);
+    }
+
+    #manualModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 50;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #manualModal input {
+      padding: 12px;
+      font-size: 18px;
+      margin: 8px 0;
+      width: 80%;
+      max-width: 300px;
+      box-sizing: border-box;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+
+    #manualModal button {
+      padding: 12px 24px;
+      margin-top: 10px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: none;
+      background: #28a745;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #manualModal .cancelButton {
+      background: #dc3545;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+
+<body>
+  <video id="video" autoplay playsinline muted></video>
+  <div id="roi"></div>
+  <canvas id="canvas"></canvas>
+  <div id="statusPill">Iniciando cámara...</div>
+
+  <div id="resultBanner">
+    <pre id="resultTable"></pre>
+    <div id="groupLabel"></div>
+    <div id="badge"></div>
+  </div>
+
+  <button id="manualToggle" onclick="toggleManualModal(true)">
+    ⌨ Manual
+  </button>
+
+  <div id="manualModal">
+    <h3 style="color:white; margin-bottom:12px;">
+      Ingreso manual
+    </h3>
+
+    <input type="text" id="manualDni" placeholder="DNI">
+    <input type="text" id="manualNombre" placeholder="Nombre (opcional)">
+    <input type="text" id="manualApellido" placeholder="Apellido (opcional)">
+
+    <button onclick="submitManual()">Consultar DNI</button>
+    <button class="cancelButton" onclick="toggleManualModal(false)">
+      Cancelar
+    </button>
+  </div>
+
+  <script>
+    const SERVER_URL = window.location.origin;
+    const NOTIFICATION_DURATION = 4000;
+    const SCAN_INTERVAL = 1000;
+    const FADE_DURATION = 300;
+    const FADE_PAUSE = 150;
+
+    let pdfReader;
+    let scanning = false;
+    let requestInProgress = false;
+    let nextScanTimer = null;
+    let fadeTimer = null;
+    let notificationTimer = null;
+
+    const video = document.getElementById("video");
+    const roi = document.getElementById("roi");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d", {
+      willReadFrequently: true
+    });
+
+    const statusPill = document.getElementById("statusPill");
+    const bannerEl = document.getElementById("resultBanner");
+    const tableEl = document.getElementById("resultTable");
+    const groupEl = document.getElementById("groupLabel");
+    const badgeEl = document.getElementById("badge");
+
+    function fadeScanLayer() {
+      clearTimeout(fadeTimer);
+
+      // Fade out the vignette and outline together.
+      roi.classList.add("fade-out");
+
+      // Fade back in after the fade-out and a short pause.
+      fadeTimer = setTimeout(() => {
+        fadeTimer = setTimeout(() => {
+          roi.classList.remove("fade-out");
+        }, FADE_PAUSE);
+      }, FADE_DURATION);
+    }
+
+    function playBeep(freq = 880, type = "sine") {
+      try {
+        const audioCtx = new (
+          window.AudioContext || window.webkitAudioContext
+        )();
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = type;
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+
+        gain.gain.exponentialRampToValueAtTime(
+          0.00001,
+          audioCtx.currentTime + 0.15
+        );
+
+        setTimeout(() => audioCtx.close(), 200);
+      } catch (e) {}
+    }
+
+    function parseDNI(raw) {
+      const p = raw.split("@");
+
+      return {
+        dni: p[4]?.trim() || p[1]?.trim() || "",
+        apellido: p[1]?.trim() || "",
+        nombre: p[2]?.trim() || ""
+      };
+    }
+
+    function formatComparison(scanned, stored) {
+      const rows = [
+        ["Nombre:", scanned.nombre, stored?.nombre ?? "—"],
+        ["Apellido:", scanned.apellido, stored?.apellido ?? "—"]
+      ];
+
+      const labelWidth = Math.max(
+        ...rows.map(row => row[0].length)
+      );
+
+      const scanWidth = Math.max(
+        "ESCANEADO".length,
+        ...rows.map(row => String(row[1] || "—").length)
+      );
+
+      const lines = [
+        `DNI: ${scanned.dni || "—"}`,
+        " ".repeat(labelWidth + 1) +
+        "ESCANEADO".padEnd(scanWidth) +
+        " PADRÓN"
+      ];
+
+      for (const [label, scannedValue, storedValue] of rows) {
+        lines.push(
+          label.padEnd(labelWidth) + " " +
+          String(scannedValue || "—").padEnd(scanWidth) + " " +
+          String(storedValue || "—")
+        );
+      }
+
+      return lines.join("\n");
+    }
+
+    function showResult(type, scanned, stored = null, message = "") {
+      clearTimeout(notificationTimer);
+
+      bannerEl.className = type;
+      tableEl.textContent = formatComparison(scanned, stored);
+
+      groupEl.textContent =
+        type === "banner-ok" ? `Grupo ${stored.grupo}` : "";
+
+      badgeEl.textContent = message;
+      bannerEl.style.display = "block";
+
+      notificationTimer = setTimeout(() => {
+        bannerEl.style.display = "none";
+      }, NOTIFICATION_DURATION);
+    }
+
+    function getCropGuide() {
+      const vWidth = video.videoWidth;
+      const vHeight = video.videoHeight;
+
+      if (!vWidth || !vHeight) return null;
+
+      const roiRect = roi.getBoundingClientRect();
+      const videoRect = video.getBoundingClientRect();
+
+      const scale = Math.max(
+        videoRect.width / vWidth,
+        videoRect.height / vHeight
+      );
+
+      const visibleWidth = videoRect.width / scale;
+      const visibleHeight = videoRect.height / scale;
+
+      const offsetX = (vWidth - visibleWidth) / 2;
+      const offsetY = (vHeight - visibleHeight) / 2;
+
+      const cropX = Math.round(
+        offsetX + (roiRect.left - videoRect.left) / scale
+      );
+
+      const cropY = Math.round(
+        offsetY + (roiRect.top - videoRect.top) / scale
+      );
+
+      const cropW = Math.round(roiRect.width / scale);
+      const cropH = Math.round(roiRect.height / scale);
+
+      const safeX = Math.max(0, Math.min(vWidth - 1, cropX));
+      const safeY = Math.max(0, Math.min(vHeight - 1, cropY));
+
+      return {
+        x: safeX,
+        y: safeY,
+        w: Math.min(vWidth - safeX, cropW),
+        h: Math.min(vHeight - safeY, cropH)
+      };
+    }
+
+    async function loop() {
+      if (!scanning || requestInProgress) return;
+
+      try {
+        if (!video.videoWidth || !video.videoHeight) {
+          setTimeout(loop, 100);
+          return;
+        }
+
+        const crop = getCropGuide();
+
+        if (!crop || crop.w <= 0 || crop.h <= 0) {
+          setTimeout(loop, 100);
+          return;
+        }
+
+        if (canvas.width !== crop.w || canvas.height !== crop.h) {
+          canvas.width = crop.w;
+          canvas.height = crop.h;
+        }
+
+        ctx.drawImage(
+          video,
+          crop.x, crop.y, crop.w, crop.h,
+          0, 0, crop.w, crop.h
+        );
+
+        const source = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        const bitmap = new ZXing.BinaryBitmap(
+          new ZXing.HybridBinarizer(source)
+        );
+
+        const result = pdfReader.decode(bitmap);
+        const data = parseDNI(result.getText());
+
+        if (!data.dni) {
+          setTimeout(loop, 80);
+          return;
+        }
+
+        scanning = false;
+        fadeScanLayer();
+        playBeep(880);
+        await send(data);
+        return;
+      } catch (err) {
+        // No se encontró un código en este fotograma.
+      }
+
+      if (scanning) setTimeout(loop, 80);
+    }
+
+    async function send(data) {
+      if (requestInProgress) return;
+
+      requestInProgress = true;
+      scanning = false;
+      statusPill.textContent = "Consultando servidor...";
+
+      clearTimeout(nextScanTimer);
+
+      try {
+        const response = await fetch(`${SERVER_URL}/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok && result.status !== "NO_ANOTADO") {
+          throw new Error(result.message || `HTTP ${response.status}`);
+        }
+
+        if (result.status === "OK") {
+          showResult("banner-ok", data, result, "ANOTADO");
+        } else if (result.status === "NO_ANOTADO") {
+          showResult("banner-bad", data, null, "NO ANOTADO");
+        } else {
+          showResult(
+            "banner-bad",
+            data,
+            null,
+            result.message || "Error al consultar el DNI"
+          );
+        }
+      } catch (err) {
+        showResult(
+          "banner-bad",
+          data,
+          null,
+          "No se pudo conectar con el servidor"
+        );
+      } finally {
+        requestInProgress = false;
+        statusPill.textContent = "Escaneando...";
+
+        clearTimeout(nextScanTimer);
+
+        nextScanTimer = setTimeout(() => {
+          if (
+            document.getElementById("manualModal").style.display !== "flex"
+          ) {
+            scanning = true;
+            loop();
+          }
+        }, SCAN_INTERVAL);
+      }
+    }
+
+    function toggleManualModal(show) {
+      const modal = document.getElementById("manualModal");
+      modal.style.display = show ? "flex" : "none";
+
+      if (show) {
+        scanning = false;
+        document.getElementById("manualDni").focus();
+      } else if (!requestInProgress) {
+        scanning = true;
+        loop();
+      }
+    }
+
+    async function submitManual() {
+      const dni = document.getElementById("manualDni").value.trim();
+      const nombre = document.getElementById("manualNombre").value.trim();
+      const apellido = document.getElementById("manualApellido").value.trim();
+
+      if (!dni) {
+        alert("Ingrese un DNI");
+        return;
+      }
+
+      document.getElementById("manualModal").style.display = "none";
+      document.getElementById("manualDni").value = "";
+      document.getElementById("manualNombre").value = "";
+      document.getElementById("manualApellido").value = "";
+
+      await send({ dni, nombre, apellido });
+    }
+
+    async function start() {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error("La cámara requiere una conexión segura.");
+        }
+
+        pdfReader = new ZXing.PDF417Reader();
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1920, min: 640 },
+            height: { ideal: 1080, min: 480 },
+            aspectRatio: { ideal: 1.7777777778 }
+          }
+        });
+
+        video.srcObject = stream;
+        await video.play();
+
+        const track = stream.getVideoTracks()[0];
+
+        if (track && "applyConstraints" in track) {
+          try {
+            await track.applyConstraints({
+              advanced: [{ focusMode: "continuous" }]
+            });
+          } catch (e) {}
+        }
+
+        statusPill.textContent = "Escaneando...";
+        scanning = true;
+        loop();
+      } catch (err) {
+        console.error("Error al iniciar la cámara:", err);
+        statusPill.textContent = "Error al iniciar cámara";
+      }
+    }
+
+    start();
+  </script>
+</body>
+</html>
