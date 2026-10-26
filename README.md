@@ -1,3 +1,8 @@
+# Acerca de
+Servidor de asistencia para fácilmente con una computadora escanear DNI y ver si pertenecen a una hoja de cálculo de Google.
+
+\+ AD MAIOREM DEI GLORIAM +
+
 # Instalación
 En una terminal, posicionados donde queremos almacenar los archivos corremos
 ```
@@ -36,4 +41,39 @@ winget install -e --id FiloSottile.mkcert
 ```
 Luego, corremos `gen-cert.bat`.
 
+<br>
+
 # Primera apertura
+Habiendo descargado la lista de personas a admitir como un CSV con formato
+| Nombre           | Apellido | DNI | ... |
+|------------------|----------|-----|-----|
+| Jon              | Doe      | 123 |     |
+
+**...filas vacías...**
+
+| Nombre           | Apellido | DNI | ... |
+|------------------|----------|-----|-----|
+| Jon              | Doe      | 123 |     |
+
+donde los grupos están separados en subtablas. Habiéndolo llamado `gente.csv` y ubicádolo donde corresponde.
+
+Y teniendo en nuestro Google Sheets una pestaña llamada "Asistencia" con forma 
+| Fecha               | DNI | Nombre | Apellido | Status |
+|---------------------|-----|--------|----------|--------|
+| 01/01/1901 00:00:00 | 123 | Jon    | Doe      | 123    |
+
+Corremos los comandos:
+```
+npm.cmd run import &&
+npm.cmd run start
+```
+
+Que importan el archivo `gente.csv` en una base de datos, y luego abren el servidor.
+Habrá un QR para los...
+
+## Certificados
+
+que se generaron y son para el celular (u otro dispositivo con navegador web). Debemos instalarlos, lo que este documento no incluirá... [**ayudín**.](https://www.google.com/search?q=instalar+rootCA.pem+en+mi+dispositivo)
+
+# Listo
+Ya puede escanear el PDF417 de los DNI y se informará si está presente en `gente.csv` o no y en qué grupo. En carpeta `logs/` se lleva un registro por si hay problemas al escribir el Sheets. Este se puede copiar y pegar (con `Ctrl+Shift+V`) manualmente.
