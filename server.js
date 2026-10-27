@@ -22,8 +22,8 @@ const LOG_DIR = path.join(__dirname, "logs");
 const LOG_FILE = path.join(LOG_DIR, "asistencia_now.log");
 
 app.use(express.json({
-		limit: "32kb"
-	}));
+	limit: "32kb"
+}));
 
 const db = new Database(DB_FILE);
 db.pragma("journal_mode = WAL");
@@ -31,8 +31,8 @@ db.pragma("journal_mode = WAL");
 // Google Sheets configuration
 const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
 const GOOGLE_KEY_FILE = path.resolve(
-		__dirname,
-		process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE || "./certs/credentials.json");
+	__dirname,
+	process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE || "./certs/credentials.json");
 
 const GOOGLE_SHEET_RANGE = "Asistencia!A:F";
 
@@ -86,7 +86,7 @@ function formatTimestamp(date = new Date()) {
 	const two = n => String(n).padStart(2, "0");
 
 	return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())} ` +
-`${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`;
+		`${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`;
 }
 
 let lastTimestamp = formatTimestamp();
@@ -115,7 +115,7 @@ function printAttendanceRow(record) {
 let outputQueue = Promise.resolve();
 
 function enqueueAttendanceOutput(record) {
-	const localTask = outputQueue.then(async() => {
+	const localTask = outputQueue.then(async () => {
 		maxName = Math.max(maxName, record.nombre.length);
 		maxApellido = Math.max(maxApellido, record.apellido.length);
 		lastTimestamp = record.fecha;
@@ -147,7 +147,7 @@ let internetQueue = Promise.resolve();
 
 function enqueueGoogleSheets(record, localTask) {
 	internetQueue = internetQueue
-		.then(async() => {
+		.then(async () => {
 			await outputQueue;
 			await localTask;
 
@@ -159,19 +159,19 @@ function enqueueGoogleSheets(record, localTask) {
 				insertDataOption: "INSERT_ROWS",
 				requestBody: {
 					values: [[
-							record.fecha,
-							record.dni,
-							record.nombre,
-							record.apellido,
-							//record.grupo,
-							record.status
-						]]
+						record.fecha,
+						record.dni,
+						record.nombre,
+						record.apellido,
+						//record.grupo,
+						record.status
+					]]
 				}
 			});
 		})
 		.catch(error => {
 			console.error(
-`Error en la cola de Google Sheets (DNI ${record.dni}):`,
+				`Error en la cola de Google Sheets (DNI ${record.dni}):`,
 				error.message);
 		});
 
@@ -264,9 +264,9 @@ async function printQrPair(ip) {
 	});
 
 	const [cert, webapp] = await Promise.all([
-				render(certUrl),
-				render(appUrl)
-			]);
+		render(certUrl),
+		render(appUrl)
+	]);
 
 	const left = cert.trimEnd().split(/\r?\n/);
 	const right = webapp.trimEnd().split(/\r?\n/);
@@ -305,7 +305,7 @@ function start() {
 		throw new Error("No people found in the database.");
 	}
 
-	for (const file of[CERT_FILE, KEY_FILE, ROOT_CA_FILE]) {
+	for (const file of [CERT_FILE, KEY_FILE, ROOT_CA_FILE]) {
 		if (!fs.existsSync(file)) {
 			throw new Error(`File not found: ${file}`);
 		}
@@ -323,10 +323,9 @@ function start() {
 		key: fs.readFileSync(KEY_FILE)
 	}, app);
 
-	server.listen(PORT, "0.0.0.0", async() => {
+	server.listen(PORT, "0.0.0.0", async () => {
 		console.log(`\nAttendance server running on port ${PORT}`);
 		console.log(`People loaded: ${total}`);
-		console.log(`Active log file: ${LOG_FILE}`);
 
 		const ips = getLocalIPs();
 		console.log("\nScan the two QR codes below:\n");
@@ -358,8 +357,8 @@ async function finalizeLog() {
 
 	while (fs.existsSync(targetPath)) {
 		targetPath = path.join(
-				LOG_DIR,
-`asistencia_${timestamp}_${counter++}.log`);
+			LOG_DIR,
+			`asistencia_${timestamp}_${counter++}.log`);
 	}
 
 	await fs.promises.rename(LOG_FILE, targetPath);
@@ -373,7 +372,7 @@ function shutdown() {
 
 	console.log("\nStopping server...");
 
-	const finishShutdown = async() => {
+	const finishShutdown = async () => {
 		try {
 			//await outputQueue;
 			await outputQueue;
@@ -414,6 +413,6 @@ try {
 	console.error("Startup error:", error.message);
 	try {
 		db.close();
-	} catch (e) {}
+	} catch (e) { }
 	process.exitCode = 1;
 }
