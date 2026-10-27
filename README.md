@@ -1,5 +1,10 @@
 # Acerca de
-Servidor de asistencia para fácilmente con una computadora escanear DNI y ver si pertenecen a una hoja de cálculo de Google.
+<p float="left">
+  <img src="./img/pc.jpg" height="300" />
+  <img src="./img/phone.jpg" height="300" /> 
+</p>
+
+Servidor que hostea una webapp local para escanear PDF417 del DNI argentino. Busca si pertenece a una lista y almacena en un google sheets.
 
 \+ AD MAIOREM DEI GLORIAM +
 
